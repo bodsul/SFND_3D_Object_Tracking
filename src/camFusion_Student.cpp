@@ -10,6 +10,14 @@
 
 using namespace std;
 
+//function object for hashing cv::Point2f types
+struct CvPoint2fHash
+{
+	std::size_t operator() (const cv::Point2f &pt) const
+	{
+		return std::hash<float>()(pt.x) ^ std::hash<float>()(pt.y);
+	}
+};
 
 // Create groups of Lidar points whose projection into the camera falls into the same bounding box
 void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT)
@@ -131,9 +139,22 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 
 
 // associate a given bounding box with the keypoints it contains
-void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
+// void clusterKptMatchesWithROI(std::vector<cv::KeyPoint> &kptsCurr, std::vector<cv::DMatch> &kptMatches)
+void clusterKptMatchesWithROI(DataFrame& currFrame)
 {
     // ...
+    for(BoundingBox box: currFrame.boundingBoxes)
+    {
+        for(cv::KeyPoint kpt: currFrame.keypoints)
+        {
+            if(box.roi.contains(kpt.pt)) box.keypoints.push_back(kpt);
+        }
+
+        for(cv::DMatch match: currFrame.kptMatches)
+        {
+            if(box.roi.contains(currFrame.keypoints[match.queryIdx].pt)) box.kptMatches.push_back(match);
+        }
+    }
 }
 
 
@@ -149,10 +170,84 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
                      std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
 {
     // ...
+    double deltaT=1/frameRate;
+    double currAvgX=0, currAvgY=0, currAvgZ=0;
+    double prevAvgX=0, prevAvgY=0, prevAvgZ=0;
+    double avgVelX, avgVelY, avgVelZ;
+    for(auto pt: lidarPointsCurr)
+    {
+        currAvgX+=pt.x;
+        currAvgY+=pt.y;
+        currAvgZ+=pt.z;
+    }
+    currAvgX/=lidarPointsCurr.size();
+    currAvgY/=lidarPointsCurr.size();
+    currAvgZ/=lidarPointsCurr.size();
+
+    for(auto pt: lidarPointsPrev)
+    {
+        prevAvgX+=pt.x;
+        prevAvgY+=pt.y;
+        prevAvgZ+=pt.z;
+    }
+    prevAvgX/=lidarPointsPrev.size();
+    prevAvgY/=lidarPointsPrev.size();
+    prevAvgZ/=lidarPointsPrev.size();
+    avgVelX = (currAvgX-prevAvgX)/deltaT;
+    avgVelY = (currAvgY-prevAvgY)/deltaT;
+    avgVelZ = (currAvgZ-prevAvgZ)/deltaT; // this should be small since Z points up
+    double avgSpeed = pow(avgVelX*avgVelX + avgVelY*avgVelY + avgVelZ*avgVelZ, 0.5);
+    double distance = pow(currAvgX*currAvgX + currAvgY*currAvgY + currAvgY*currAvgY, 0.5);
+    TTC = distance/avgSpeed;
 }
 
+float IOU(const std::unordered_set<cv::Point2f, CvPoint2fHash>& first, const std::unordered_set<cv::Point2f, CvPoint2fHash>& second)
+{
+    if(first.size()==0 || second.size()==0) return -1;
+    uint intersection_size = 0;
+    for(auto entry: first)
+    {
+        if(std::find(second.begin(), second.end(), entry)!=second.end()) intersection_size++;
+    }
+    return (float)intersection_size/(first.size() + second.size()-intersection_size);
+}
 
-void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
+void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, float iouTolerance)
 {
     // ...
+    int idx;
+    for (BoundingBox bbox: currFrame.boundingBoxes)
+    {
+        float max_iou = 0.0f;
+        float iou = 0.0f;
+        //get indices of predicted keypoints matched in prevframe based on keypoint match assigned to bbox
+        std::unordered_set<int> predictedKptIdxs; 
+        for(cv::DMatch match: bbox.kptMatches)
+        {
+            predictedKptIdxs.insert(match.trainIdx);
+        }
+        //get predicted keypoints matched in prevframe based on keypoint match assigned to bbox
+        //use keypoint.pt to simplify hash function for unordered_set
+        std::unordered_set<cv::Point2f, CvPoint2fHash> predictedKpts;
+
+        for(int idx: predictedKptIdxs){
+            //predictedKpts.push_back(prevFrame.keypoints[idx]);
+            predictedKpts.insert(prevFrame.keypoints[idx].pt);
+        }
+
+        //for each bounding box in prevframe compute iou of predicted keypoints to keypoint of bounding box
+        //assign matched box as one with max iou
+        int matchedBoxId =-1;
+        for (BoundingBox mbbox: prevFrame.boundingBoxes)
+        {
+            std:unordered_set<cv::Point2f, CvPoint2fHash> kptsToMatch;
+            for(auto kpt: mbbox.keypoints)
+            {
+                kptsToMatch.insert(kpt.pt);
+            }
+            float iou = IOU(predictedKpts, kptsToMatch);
+            if(iou > max_iou && iou > iouTolerance) matchedBoxId = mbbox.boxID;
+        }
+        if(matchedBoxId!=-1) bbBestMatches.insert(std::pair<int, int>(bbox.boxID, matchedBoxId));
+    }
 }
