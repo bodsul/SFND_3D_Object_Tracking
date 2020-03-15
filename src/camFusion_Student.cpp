@@ -222,51 +222,6 @@ float IOU(const std::unordered_set<cv::Point2f, CvPoint2fHash>& first, const std
     return (float)intersection_size/(first.size() + second.size()-intersection_size);
 }
 
-void matchBoundingBoxes2(std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, float iouTolerance)
-{
-    for (BoundingBox bbox: currFrame.boundingBoxes)
-    {
-        float max_iou = 0.0f;
-        float iou = 0.0f;
-        //get indices of predicted keypoints matched in prevframe based on keypoint match assigned to bbox
-        std::unordered_set<int> predictedKptIdxs; 
-        for(cv::DMatch match: bbox.kptMatches)
-        {
-            predictedKptIdxs.insert(match.queryIdx);
-        }
-        //get predicted keypoints matched in prevframe based on keypoint match assigned to bbox
-        //use keypoint.pt to simplify hash function for unordered_set
-        std::unordered_set<cv::Point2f, CvPoint2fHash> predictedKpts;
-
-        for(int idx: predictedKptIdxs){
-            //predictedKpts.push_back(prevFrame.keypoints[idx]);
-            predictedKpts.insert(prevFrame.keypoints[idx].pt);
-        }
-
-        //for each bounding box in prevframe compute iou of predicted keypoints to keypoints of bounding box
-        //assign matched box as one with max iou
-        int matchedBoxId =-1;
-        for (BoundingBox mbbox: prevFrame.boundingBoxes)
-        {
-            std:unordered_set<cv::Point2f, CvPoint2fHash> kptsToMatch;
-            for(auto kpt: mbbox.keypoints)
-            {
-                kptsToMatch.insert(kpt.pt);
-            }
-            float iou = IOU(predictedKpts, kptsToMatch);
-            if(iou > max_iou && iou > iouTolerance) {
-                max_iou = iou;
-                matchedBoxId = mbbox.boxID;
-            }
-        }
-        if(matchedBoxId!=-1){
-            std::cout << "max_iou: " << max_iou << std::endl;
-            std::cout << "matched_box: " << matchedBoxId << std::endl;
-            bbBestMatches.insert(std::pair<int, int>(matchedBoxId, bbox.boxID));
-        } 
-    }
-}
-
 void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, float iouTolerance)
 {
     std::vector<std::pair<std::pair<int, int>, float>> iou_for_all_box_pairs;
@@ -288,7 +243,6 @@ void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame,
         }
 
         //for each bounding box in prevframe compute iou of predicted keypoints to keypoints of bounding box
-        //assign matched box as one with max iou
         for (BoundingBox mbbox: prevFrame.boundingBoxes)
         {
             std:unordered_set<cv::Point2f, CvPoint2fHash> kptsToMatch;
@@ -301,15 +255,10 @@ void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame,
             auto res = std::pair<std::pair<int, int>, float>(matched_pair, iou);
             iou_for_all_box_pairs.push_back(res);
         }
-        // int matchedBoxId =-1;
-
-        // if(matchedBoxId!=-1){
-        //     std::cout << "max_iou: " << max_iou << std::endl;
-        //     std::cout << "matched_box: " << matchedBoxId << std::endl;
-        //     bbBestMatches.insert(std::pair<int, int>(matchedBoxId, bbox.boxID));
-        // } 
     }
+    //sort oll pair of bounding box potential matches by IOU
     std::sort(iou_for_all_box_pairs.begin(), iou_for_all_box_pairs.end(), CustomGreaterThan);
+    //associate bounding boxes
     std::unordered_set<int> matched_current_boxes, matched_previous_boxes;
     for(auto box_pair_iou: iou_for_all_box_pairs)
     {
