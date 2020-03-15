@@ -72,12 +72,12 @@ int main(int argc, const char *argv[])
     double sensorFrameRate = 10.0 / imgStepWidth; // frames per second for Lidar and camera
     int dataBufferSize = 2;       // no. of images which are held in memory (ring buffer) at the same time
     vector<DataFrame> dataBuffer; // list of data frames which are held in memory at the same time
-    bool bVis = false;            // visualize results
-
+    bool bVis;
     /* MAIN LOOP OVER ALL IMAGES */
 
     for (size_t imgIndex = 0; imgIndex <= imgEndIndex - imgStartIndex; imgIndex+=imgStepWidth)
     {
+        bVis = false;
         /* LOAD IMAGE INTO BUFFER */
 
         // assemble filenames for current index
@@ -129,7 +129,7 @@ int main(int argc, const char *argv[])
         clusterLidarWithROI((dataBuffer.end()-1)->boundingBoxes, (dataBuffer.end() - 1)->lidarPoints, shrinkFactor, P_rect_00, R_rect_00, RT);
 
         // Visualize 3D objects
-        bVis = true;
+        bVis = false;
         if(bVis)
         {
             show3DObjects((dataBuffer.end()-1)->boundingBoxes, cv::Size(4.0, 20.0), cv::Size(2000, 2000), true);
@@ -140,7 +140,7 @@ int main(int argc, const char *argv[])
         
         
         // REMOVE THIS LINE BEFORE PROCEEDING WITH THE FINAL PROJECT
-        continue; // skips directly to the next image without processing what comes beneath
+        //continue; // skips directly to the next image without processing what comes beneath
 
         /* DETECT IMAGE KEYPOINTS */
 
@@ -192,6 +192,9 @@ int main(int argc, const char *argv[])
 
         cout << "#6 : EXTRACT DESCRIPTORS done" << endl;
 
+        //for the first frame associate bounding box with the keypoints it contains
+        if (dataBuffer.size() == 1)
+            clusterKptMatchesWithROI(*(dataBuffer.end() - 1));                    
 
         if (dataBuffer.size() > 1) // wait until at least two images have been processed
         {
@@ -217,15 +220,15 @@ int main(int argc, const char *argv[])
 
             // STUDENT ASSIGNMENT
             // TASK FP.1 -> match list of 3D objects (vector<BoundingBox>) between current and previous frame (implement ->matchBoundingBoxes)
-            clusterKptMatchesWithROI(*(dataBuffer.end() - 1));                    
-
+            //Associate bounding box with the keypoints and keypoint matches it contains
+            clusterKptMatchesWithROI(*(dataBuffer.end() - 1));
             map<int, int> bbBestMatches;
-            matchBoundingBoxes(bbBestMatches, *(dataBuffer.end()-2), *(dataBuffer.end()-1)); // associate bounding boxes between current and previous frame using keypoint matches
+            float iouTolerance = 0.2f;
+            matchBoundingBoxes(bbBestMatches, *(dataBuffer.end()-2), *(dataBuffer.end()-1), iouTolerance); // associate bounding boxes between current and previous frame using keypoint matches
             // EOF STUDENT ASSIGNMENT
-
+            std::cout << "number of matches: " << bbBestMatches.size() << std::endl;
             // store matches in current data frame
             (dataBuffer.end()-1)->bbMatches = bbBestMatches;
-
             cout << "#8 : TRACK 3D OBJECT BOUNDING BOXES done" << endl;
 
 

@@ -19,6 +19,14 @@ struct CvPoint2fHash
 	}
 };
 
+struct 
+{
+    bool operator() (const std::pair<std::pair<int, int>, float>& item, const std::pair<std::pair<int, int>, float>& other) const
+    {
+        return item.second > other.second;
+    }
+}CustomGreaterThan;
+
 // Create groups of Lidar points whose projection into the camera falls into the same bounding box
 void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT)
 {
@@ -143,7 +151,7 @@ void show3DObjects(std::vector<BoundingBox> &boundingBoxes, cv::Size worldSize, 
 void clusterKptMatchesWithROI(DataFrame& currFrame)
 {
     // ...
-    for(BoundingBox box: currFrame.boundingBoxes)
+    for(BoundingBox& box: currFrame.boundingBoxes)
     {
         for(cv::KeyPoint kpt: currFrame.keypoints)
         {
@@ -152,8 +160,10 @@ void clusterKptMatchesWithROI(DataFrame& currFrame)
 
         for(cv::DMatch match: currFrame.kptMatches)
         {
-            if(box.roi.contains(currFrame.keypoints[match.queryIdx].pt)) box.kptMatches.push_back(match);
+            if(box.roi.contains(currFrame.keypoints[match.trainIdx].pt)) box.kptMatches.push_back(match);
         }
+        // std::cout << "n_keypoints: " << box.keypoints.size() << std::endl;
+        // std::cout << "n_matches: " << box.kptMatches.size() << std::endl;
     }
 }
 
@@ -212,10 +222,8 @@ float IOU(const std::unordered_set<cv::Point2f, CvPoint2fHash>& first, const std
     return (float)intersection_size/(first.size() + second.size()-intersection_size);
 }
 
-void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, float iouTolerance)
+void matchBoundingBoxes2(std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, float iouTolerance)
 {
-    // ...
-    int idx;
     for (BoundingBox bbox: currFrame.boundingBoxes)
     {
         float max_iou = 0.0f;
@@ -224,7 +232,7 @@ void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame,
         std::unordered_set<int> predictedKptIdxs; 
         for(cv::DMatch match: bbox.kptMatches)
         {
-            predictedKptIdxs.insert(match.trainIdx);
+            predictedKptIdxs.insert(match.queryIdx);
         }
         //get predicted keypoints matched in prevframe based on keypoint match assigned to bbox
         //use keypoint.pt to simplify hash function for unordered_set
@@ -235,7 +243,7 @@ void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame,
             predictedKpts.insert(prevFrame.keypoints[idx].pt);
         }
 
-        //for each bounding box in prevframe compute iou of predicted keypoints to keypoint of bounding box
+        //for each bounding box in prevframe compute iou of predicted keypoints to keypoints of bounding box
         //assign matched box as one with max iou
         int matchedBoxId =-1;
         for (BoundingBox mbbox: prevFrame.boundingBoxes)
@@ -246,8 +254,77 @@ void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame,
                 kptsToMatch.insert(kpt.pt);
             }
             float iou = IOU(predictedKpts, kptsToMatch);
-            if(iou > max_iou && iou > iouTolerance) matchedBoxId = mbbox.boxID;
+            if(iou > max_iou && iou > iouTolerance) {
+                max_iou = iou;
+                matchedBoxId = mbbox.boxID;
+            }
         }
-        if(matchedBoxId!=-1) bbBestMatches.insert(std::pair<int, int>(bbox.boxID, matchedBoxId));
+        if(matchedBoxId!=-1){
+            std::cout << "max_iou: " << max_iou << std::endl;
+            std::cout << "matched_box: " << matchedBoxId << std::endl;
+            bbBestMatches.insert(std::pair<int, int>(matchedBoxId, bbox.boxID));
+        } 
+    }
+}
+
+void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, float iouTolerance)
+{
+    std::vector<std::pair<std::pair<int, int>, float>> iou_for_all_box_pairs;
+    for (BoundingBox bbox: currFrame.boundingBoxes)
+    {
+        //get indices of predicted keypoints matched in prevframe based on keypoint match assigned to bbox
+        std::unordered_set<int> predictedKptIdxs; 
+        for(cv::DMatch match: bbox.kptMatches)
+        {
+            predictedKptIdxs.insert(match.queryIdx);
+        }
+        //get predicted keypoints matched in prevframe based on keypoint match assigned to bbox
+        //use keypoint.pt to simplify hash function for unordered_set
+        std::unordered_set<cv::Point2f, CvPoint2fHash> predictedKpts;
+
+        for(int idx: predictedKptIdxs){
+            //predictedKpts.push_back(prevFrame.keypoints[idx]);
+            predictedKpts.insert(prevFrame.keypoints[idx].pt);
+        }
+
+        //for each bounding box in prevframe compute iou of predicted keypoints to keypoints of bounding box
+        //assign matched box as one with max iou
+        for (BoundingBox mbbox: prevFrame.boundingBoxes)
+        {
+            std:unordered_set<cv::Point2f, CvPoint2fHash> kptsToMatch;
+            for(auto kpt: mbbox.keypoints)
+            {
+                kptsToMatch.insert(kpt.pt);
+            }
+            float iou = IOU(predictedKpts, kptsToMatch);
+            auto matched_pair = std::pair<int, int>(mbbox.boxID, bbox.boxID);
+            auto res = std::pair<std::pair<int, int>, float>(matched_pair, iou);
+            iou_for_all_box_pairs.push_back(res);
+        }
+        // int matchedBoxId =-1;
+
+        // if(matchedBoxId!=-1){
+        //     std::cout << "max_iou: " << max_iou << std::endl;
+        //     std::cout << "matched_box: " << matchedBoxId << std::endl;
+        //     bbBestMatches.insert(std::pair<int, int>(matchedBoxId, bbox.boxID));
+        // } 
+    }
+    std::sort(iou_for_all_box_pairs.begin(), iou_for_all_box_pairs.end(), CustomGreaterThan);
+    std::unordered_set<int> matched_current_boxes, matched_previous_boxes;
+    for(auto box_pair_iou: iou_for_all_box_pairs)
+    {
+        //stop assignment if iouTolerance is hit
+        if(box_pair_iou.second < iouTolerance) break;
+        if(std::find(matched_previous_boxes.begin(), matched_previous_boxes.end(),\
+         box_pair_iou.first.first) == matched_previous_boxes.end() &&
+         std::find(matched_current_boxes.begin(), matched_current_boxes.end(),\
+         box_pair_iou.first.second) == matched_current_boxes.end())
+         {
+             matched_previous_boxes.insert(box_pair_iou.first.first);
+             matched_current_boxes.insert(box_pair_iou.first.second);
+            //  std::cout << "matched_iou: " << box_pair_iou.second << std::endl;
+            //  std::cout << "prev_box_id: " << box_pair_iou.first.first <<  " curr_box_id: " <<  box_pair_iou.first.second << std::endl;
+             bbBestMatches.insert(box_pair_iou.first);
+         }
     }
 }
