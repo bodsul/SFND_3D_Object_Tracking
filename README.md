@@ -33,3 +33,22 @@ In this final project, you will implement the missing parts in the schematic. To
 2. Make a build directory in the top level project directory: `mkdir build && cd build`
 3. Compile: `cmake .. && make`
 4. Run it: `./3D_object_tracking`.
+
+## Implementation Explanations
+In this project we detect lidar point cloud from Lidar, image bounding boxes and keypoints from camera image for a driving scene. This is done frame by frame. We detect image keypoints using several key point detectors (to be added) and match keypoints between consecutive frames using several key point matchers (to be added).
+
+Using camera intrinsic and extrinsic calibration parameters and also the lidar calibration parameters we are able to
+project lidar points to the image plane. This gives a correspondence between image bounding boxes and lidar points. These parts of the project were already implemented for us or in previous sections of the course.
+
+Below we describe extra implementations added in src/camFusion_Student.cpp:
+
+We get a correspondence between image bounding boxes and keypoints by assigning each keypoint to all bounding boxes
+they fall into. Similarly, we have a correspondence between image bounding boxes and keypoint matches. This is implemented in clusterKptMatchesWithROI.
+
+Using the association of bounding boxes to keypoints and keypoint matches, we can match bounding boxes in corresponding frames. First for each bounding box in the current frame we predict matched key points to
+the previous frame using the matches in the ROI of the bounding box. Next we compute the IOU of the predicted key points with the keypoints in the ROI of the bounding boxes in the previous frame. This gives a score between all pair
+of bounding boxes in the current frame and the previous frame. Using the score, we implement a standard association algorithm. The details can be found in matchBoundingBoxes.
+
+Using the matched bounding boxes and lidar points that project into the bounding boxes, we get can estimate a trajectory in 3D space which can be used to estimate a lidar based TTC. The details are implemented in computeTTCLidar.
+
+Add descriptions of computeTTCCamera, descriptions of examples where TTC estimate of the Lidar sensor does not seem plausible and description of comparison of the performance of the different keypoint detection and matching algorithms after it is clarified what computeTTCCamera should be doing.
