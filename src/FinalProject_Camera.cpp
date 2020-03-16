@@ -75,11 +75,15 @@ int main(int argc, const char *argv[])
     vector<DataFrame> dataBuffer; // list of data frames which are held in memory at the same time
     bool bVis;
     std::vector<cv::Scalar> colors = {cv::Scalar(255, 0, 0), cv::Scalar(0, 255, 0), cv::Scalar(0, 0, 255), cv::Scalar(255, 0, 255),
-                                        cv::Scalar(255, 255, 0), cv::Scalar(0, 255, 255), cv::Scalar(128, 0, 128), cv::Scalar(255, 215, 0)};
-    //invariant object id maps for cars detected in second frame
-    std::unordered_map<int, int> invariant_object_id_map;
-    //TTC_matrix[i] is a vector of TTCS for object with invariant id i
-    std::unordered_map<int, std::vector<float>> invariant_object_id_TTCs_map;
+                                        cv::Scalar(25, 255, 130), cv::Scalar(0, 255, 255), cv::Scalar(128, 0, 128), cv::Scalar(255, 215, 0), 
+                                        cv::Scalar(255, 100, 100), cv::Scalar(10, 255, 10), cv::Scalar(20, 20, 255), cv::Scalar(55, 100, 155),
+                                        cv::Scalar(155, 155, 100), cv::Scalar(100, 255, 255), cv::Scalar(128, 100, 128), cv::Scalar(120, 215, 20),
+                                        cv::Scalar(55, 10, 100)};
+    //map from boxID to track id 
+    std::unordered_map<int, int> box_id_to_track_id_map;
+    //TTC_matrix[i] is a vector of TTCS for object with track id i
+    std::unordered_map<int, std::vector<float>> track_id_to_TTCs_map;
+    int max_track_id = -1;
     /* MAIN LOOP OVER ALL IMAGES */
 
     for (size_t imgIndex = 0; imgIndex <= imgEndIndex - imgStartIndex; imgIndex+=imgStepWidth)
@@ -242,8 +246,8 @@ int main(int argc, const char *argv[])
             cv::Mat visImg;
             // loop over all BB match pairs
             int match_idx = -1;
-            auto prev_invariant_object_id_map = invariant_object_id_map;
-            invariant_object_id_map.clear();
+            auto prev_box_id_to_track_id_map = box_id_to_track_id_map;
+            box_id_to_track_id_map.clear();
             for (auto it1 = (dataBuffer.end() - 1)->bbMatches.begin(); it1 != (dataBuffer.end() - 1)->bbMatches.end(); ++it1)
             {
                 match_idx++;
@@ -252,11 +256,15 @@ int main(int argc, const char *argv[])
                 } 
                 //assign colors
                 if (dataBuffer.size()==2 && match_idx < colors.size()){
-                    invariant_object_id_map.insert({it1->second, match_idx});
+                    box_id_to_track_id_map.insert({it1->second, match_idx});
+                    max_track_id = match_idx;
                 }
 
-                if (dataBuffer.size()>2 && prev_invariant_object_id_map.find(it1->first) != prev_invariant_object_id_map.end()){
-                    invariant_object_id_map.insert({it1->second, prev_invariant_object_id_map[it1->first]});
+                if (dataBuffer.size()>2 && prev_box_id_to_track_id_map.find(it1->first) != prev_box_id_to_track_id_map.end()){
+                    box_id_to_track_id_map.insert({it1->second, prev_box_id_to_track_id_map[it1->first]});
+                }
+                if (dataBuffer.size()>2 && prev_box_id_to_track_id_map.find(it1->first) == prev_box_id_to_track_id_map.end()){
+                    box_id_to_track_id_map.insert({it1->second, ++max_track_id});
                 }
                 // find bounding boxes associates with current match
                 BoundingBox *prevBB, *currBB;
@@ -290,16 +298,14 @@ int main(int argc, const char *argv[])
                     // TASK FP.4 -> compute time-to-collision based on camera (implement -> computeTTCCamera)
                     double ttcCamera;
                     computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
-                    showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00, R_rect_00, RT, &visImg);
-                    if(invariant_object_id_map.find(currBB->boxID) != invariant_object_id_map.end()){
-                        invariant_object_id_TTCs_map[invariant_object_id_map[currBB->boxID]].push_back(ttcLidar);
-                        cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y), cv::Point(currBB->roi.x + currBB->roi.width, currBB->roi.y + currBB->roi.height),\
-                            colors[invariant_object_id_map[currBB->boxID]] , 2);
-                        char str_id[5];
-                        sprintf(str_id, "object %d", invariant_object_id_map[currBB->boxID]);
-                        putText(visImg, str_id, cv::Point(currBB->roi.x, currBB->roi.y-10), \
-                        cv::FONT_HERSHEY_SIMPLEX, 0.9, colors[invariant_object_id_map[currBB->boxID]], 2);
-                    } 
+                    //showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00, R_rect_00, RT, &visImg);
+                    track_id_to_TTCs_map[box_id_to_track_id_map[currBB->boxID]].push_back(ttcLidar);
+                    cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y), cv::Point(currBB->roi.x + currBB->roi.width, currBB->roi.y + currBB->roi.height),\
+                        colors[box_id_to_track_id_map[currBB->boxID]] , 2);
+                    char str_id[5];
+                    sprintf(str_id, "track id %d", box_id_to_track_id_map[currBB->boxID]);
+                    //putText(visImg, str_id, cv::Point(currBB->roi.x, currBB->roi.y-10), \
+                    cv::FONT_HERSHEY_SIMPLEX, 0.9, colors[box_id_to_track_id_map[currBB->boxID]], 2);
                     if(currBB->vehicle_in_front)
                     {
                         char str[200];
@@ -318,9 +324,9 @@ int main(int argc, const char *argv[])
     } // eof loop over all images
 
     //print out TTCs
-    for(auto TTCs: invariant_object_id_TTCs_map)
+    for(auto TTCs: track_id_to_TTCs_map)
     {
-        std:cout << "object_id: " << TTCs.first << std::endl;
+        std:cout << "track_id: " << TTCs.first << std::endl;
         for(float ttc: TTCs.second) std::cout << ttc << " ";
         std::cout << std::endl;
     }
