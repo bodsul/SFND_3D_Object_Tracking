@@ -13,7 +13,7 @@ struct LidarPoint { // single lidar point in space
 struct BoundingBox { // bounding box around a classified object (contains both 2D and 3D data)
     
     int boxID; // unique identifier for this bounding box
-    int trackID; // unique identifier for the track to which this bounding box belongs
+    int trackID=-1; // unique identifier for the track to which this bounding box belongs
     
     cv::Rect roi; // 2D region-of-interest in image coordinates
     int classID; // ID based on class file provided to YOLO framework

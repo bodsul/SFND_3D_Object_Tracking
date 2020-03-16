@@ -80,7 +80,7 @@ int main(int argc, const char *argv[])
                                         cv::Scalar(155, 155, 100), cv::Scalar(100, 255, 255), cv::Scalar(128, 100, 128), cv::Scalar(120, 215, 20),
                                         cv::Scalar(55, 10, 100)};
     //map from boxID to track id 
-    std::unordered_map<int, int> box_id_to_track_id_map;
+    //std::unordered_map<int, int> box_id_to_track_id_map;
     //TTC_matrix[i] is a vector of TTCS for object with track id i
     std::unordered_map<int, std::vector<float>> track_id_to_TTCs_map;
     int max_track_id = -1;
@@ -113,7 +113,7 @@ int main(int argc, const char *argv[])
         float nmsThreshold = 0.4;        
         detectObjects((dataBuffer.end() - 1)->cameraImg, (dataBuffer.end() - 1)->boundingBoxes, confThreshold, nmsThreshold,
                       yoloBasePath, yoloClassesFile, yoloModelConfiguration, yoloModelWeights, bVis);
-
+        
         cout << "#2 : DETECT & CLASSIFY OBJECTS done" << endl;
 
 
@@ -235,7 +235,7 @@ int main(int argc, const char *argv[])
             clusterKptMatchesWithROI(*(dataBuffer.end() - 1));
             map<int, int> bbBestMatches;
             float iouTolerance = 0.2f;
-            matchBoundingBoxes(bbBestMatches, *(dataBuffer.end()-2), *(dataBuffer.end()-1), iouTolerance); // associate bounding boxes between current and previous frame using keypoint matches
+            matchBoundingBoxes(bbBestMatches, *(dataBuffer.end()-2), *(dataBuffer.end()-1), iouTolerance, max_track_id); // associate bounding boxes between current and previous frame using keypoint matches
             // EOF STUDENT ASSIGNMENT
             std::cout << "number of matches: " << bbBestMatches.size() << std::endl;
             // store matches in current data frame
@@ -245,27 +245,11 @@ int main(int argc, const char *argv[])
             /* COMPUTE TTC ON OBJECT IN FRONT */
             cv::Mat visImg;
             // loop over all BB match pairs
-            int match_idx = -1;
-            auto prev_box_id_to_track_id_map = box_id_to_track_id_map;
-            box_id_to_track_id_map.clear();
             for (auto it1 = (dataBuffer.end() - 1)->bbMatches.begin(); it1 != (dataBuffer.end() - 1)->bbMatches.end(); ++it1)
             {
-                match_idx++;
-                if(match_idx==0){
+                if(it1==(dataBuffer.end() - 1)->bbMatches.begin()){
                     visImg = (dataBuffer.end() - 1)->cameraImg.clone();
                 } 
-                //assign colors
-                if (dataBuffer.size()==2 && match_idx < colors.size()){
-                    box_id_to_track_id_map.insert({it1->second, match_idx});
-                    max_track_id = match_idx;
-                }
-
-                if (dataBuffer.size()>2 && prev_box_id_to_track_id_map.find(it1->first) != prev_box_id_to_track_id_map.end()){
-                    box_id_to_track_id_map.insert({it1->second, prev_box_id_to_track_id_map[it1->first]});
-                }
-                if (dataBuffer.size()>2 && prev_box_id_to_track_id_map.find(it1->first) == prev_box_id_to_track_id_map.end()){
-                    box_id_to_track_id_map.insert({it1->second, ++max_track_id});
-                }
                 // find bounding boxes associates with current match
                 BoundingBox *prevBB, *currBB;
                 for (auto it2 = (dataBuffer.end() - 1)->boundingBoxes.begin(); it2 != (dataBuffer.end() - 1)->boundingBoxes.end(); ++it2)
@@ -290,22 +274,22 @@ int main(int argc, const char *argv[])
                     // STUDENT ASSIGNMENT
                     // TASK FP.2 -> compute time-to-collision based on Lidar data (implement -> computeTTCLidar)
                     double ttcLidar; 
-                    computeTTCLidar(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcLidar);
+                    computeTTC(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcLidar);
                     // EOF STUDENT ASSIGNMENT
 
                     // STUDENT ASSIGNMENT
                     // TASK FP.3 -> assign enclosed keypoint matches to bounding box (implement -> clusterKptMatchesWithROI)
                     // TASK FP.4 -> compute time-to-collision based on camera (implement -> computeTTCCamera)
                     double ttcCamera;
-                    computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
+                    //computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
                     //showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00, R_rect_00, RT, &visImg);
-                    track_id_to_TTCs_map[box_id_to_track_id_map[currBB->boxID]].push_back(ttcLidar);
+                    track_id_to_TTCs_map[currBB->trackID].push_back(ttcLidar);
                     cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y), cv::Point(currBB->roi.x + currBB->roi.width, currBB->roi.y + currBB->roi.height),\
-                        colors[box_id_to_track_id_map[currBB->boxID]] , 2);
+                        colors[currBB->trackID % colors.size()], 2);
                     char str_id[5];
-                    sprintf(str_id, "track id %d", box_id_to_track_id_map[currBB->boxID]);
+                    sprintf(str_id, "track id %d", currBB->trackID);
                     //putText(visImg, str_id, cv::Point(currBB->roi.x, currBB->roi.y-10), \
-                    cv::FONT_HERSHEY_SIMPLEX, 0.9, colors[box_id_to_track_id_map[currBB->boxID]], 2);
+                    cv::FONT_HERSHEY_SIMPLEX, 0.9, colors[currBB->trackID], 2);
                     if(currBB->vehicle_in_front)
                     {
                         char str[200];
@@ -317,7 +301,6 @@ int main(int argc, const char *argv[])
             string windowName = "Final Results : TTC";
             cv::namedWindow(windowName, 4);
             cv::imshow(windowName, visImg);
-            cout << "Press key to continue to next frame" << endl;
             cv::waitKey(1);
         }
 
