@@ -22,6 +22,7 @@ struct BoundingBox { // bounding box around a classified object (contains both 2
     std::vector<LidarPoint> lidarPoints; // Lidar 3D points which project into 2D image roi
     std::vector<cv::KeyPoint> keypoints; // keypoints enclosed by 2D roi
     std::vector<cv::DMatch> kptMatches; // keypoint matches enclosed by 2D roi
+    bool vehicle_in_front = false;
 };
 
 struct DataFrame { // represents the available sensor information at the same time instance

@@ -28,7 +28,8 @@ struct
 }CustomGreaterThan;
 
 // Create groups of Lidar points whose projection into the camera falls into the same bounding box
-void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT)
+void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT, 
+float minZ, float maxZ, float minX, float maxX, float maxY, float minR)\
 {
     // loop over all Lidar points and associate them to a 2D bounding box
     cv::Mat X(4, 1, cv::DataType<double>::type);
@@ -69,6 +70,10 @@ void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<Li
         // check wether point has been enclosed by one or by multiple boxes
         if (enclosingBoxes.size() == 1)
         { 
+            if( !enclosingBoxes[0]->vehicle_in_front && (*it1).x>=minX && (*it1).x<=maxX && (*it1).z>=minZ && (*it1).z<=maxZ && (*it1).z<=0.0 && abs((*it1).y)<=maxY && (*it1).r>=minR )
+            {
+                enclosingBoxes[0]->vehicle_in_front = true;
+            }
             // add Lidar point to bounding box
             enclosingBoxes[0]->lidarPoints.push_back(*it1);
         }
