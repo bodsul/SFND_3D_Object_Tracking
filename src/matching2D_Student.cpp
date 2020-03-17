@@ -49,10 +49,29 @@ void descKeypoints(vector<cv::KeyPoint> &keypoints, cv::Mat &img, cv::Mat &descr
 
         extractor = cv::BRISK::create(threshold, octaves, patternScale);
     }
+    else if (descriptorType.compare("BRIEF") == 0)
+    {
+        extractor = cv::ORB::create();
+    }
+    else if (descriptorType.compare("ORB") == 0)
+    {
+        extractor = cv::xfeatures2d::BriefDescriptorExtractor::create();
+    }
+    else if (descriptorType.compare("FREAK") == 0)
+    {
+        extractor = cv::xfeatures2d::FREAK::create();
+    }
+    else if (descriptorType.compare("AKAZE") == 0)
+    {
+        extractor = cv::AKAZE::create();
+    }
+    else if (descriptorType.compare("SIFT") == 0)
+    {
+        extractor = cv::xfeatures2d::SIFT::create();
+    }
     else
     {
-
-        //...
+        std::cout << "Unmplimented descriptor: " << descriptorType << std::endl;
     }
 
     // perform feature description
@@ -101,4 +120,68 @@ void detKeypointsShiTomasi(vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool b
         imshow(windowName, visImage);
         cv::waitKey(0);
     }
+}
+
+// Detect keypoints in image using the Harris corner detector
+void detKeypointsHarris(std::vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis)
+{
+    // compute detector parameters based on image size
+    int blockSize = 4;       //  size of an average block for computing a derivative covariation matrix over each pixel neighborhood
+    double maxOverlap = 0.0; // max. permissible overlap between two features in %
+    double minDistance = (1.0 - maxOverlap) * blockSize;
+    int maxCorners = img.rows * img.cols / max(1.0, minDistance); // max. num. of keypoints
+
+    double qualityLevel = 0.01; // minimal accepted quality of image corners
+    double k = 0.04;
+
+    // Apply corner detection
+    vector<cv::Point2f> corners;
+    cv::goodFeaturesToTrack(img, corners, maxCorners, qualityLevel, minDistance, cv::Mat(), blockSize, true, k);
+
+    // add corners to result vector
+    for (auto it = corners.begin(); it != corners.end(); ++it)
+    {
+        cv::KeyPoint newKeyPoint;
+        newKeyPoint.pt = cv::Point2f((*it).x, (*it).y);
+        newKeyPoint.size = blockSize;
+        keypoints.push_back(newKeyPoint);
+    }
+
+}
+
+void detKeypointsFast(std::vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis)
+{
+    cv::Ptr<cv::FastFeatureDetector> detector = cv::FastFeatureDetector::create();
+    detector->detect(img, keypoints);  
+}
+
+void detKeypointsBRISK(std::vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis)
+{
+    cv::Ptr<cv::BRISK> detector = cv::BRISK::create();
+    detector->detect(img, keypoints);
+}
+
+void detKeypointsSurf(std::vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis)
+{
+    int minHessian = 400;
+    cv::Ptr<cv::xfeatures2d::SURF> detector = cv::xfeatures2d::SURF::create( minHessian );
+    detector->detect( img, keypoints );    
+}
+
+void detKeypointsSIFT(std::vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis)
+{
+    cv::Ptr<cv::xfeatures2d::SIFT> detector = cv::xfeatures2d::SIFT::create();
+    detector->detect( img, keypoints );     
+}
+
+void detKeypointsORB(std::vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis)
+{
+    cv::Ptr<cv::ORB> detector = cv::ORB::create();
+    detector->detect( img, keypoints );     
+}
+
+void detKeypointsAKAZE(std::vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis)
+{
+    cv::Ptr<cv::AKAZE> detector = cv::AKAZE::create();
+    detector->detect( img, keypoints );      
 }

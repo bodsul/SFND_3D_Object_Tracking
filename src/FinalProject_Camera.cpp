@@ -7,6 +7,7 @@
 #include <vector>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <unordered_map>
 #include <opencv2/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -24,7 +25,7 @@
 using namespace std;
 
 /* MAIN PROGRAM */
-int main(int argc, const char *argv[])
+void run(string detectorType, string descriptorType)
 {
     /* INIT VARIABLES AND DATA STRUCTURES */
 
@@ -166,7 +167,6 @@ int main(int argc, const char *argv[])
 
         // extract 2D keypoints from current image
         vector<cv::KeyPoint> keypoints; // create empty feature list for current image
-        string detectorType = "SHITOMASI";
 
         if (detectorType.compare("SHITOMASI") == 0)
         {
@@ -219,7 +219,6 @@ int main(int argc, const char *argv[])
 
             vector<cv::DMatch> matches;
             string matcherType = "MAT_BF";        // MAT_BF, MAT_FLANN
-            string descriptorType = "DES_BINARY"; // DES_BINARY, DES_HOG
             string selectorType = "SEL_NN";       // SEL_NN, SEL_KNN
 
             matchDescriptors((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
@@ -302,11 +301,14 @@ int main(int argc, const char *argv[])
                         putText(visImg, str, cv::Point2f(80, 50), cv::FONT_HERSHEY_PLAIN, 2, cv::Scalar(0,0,255));
                     }
                 } // eof TTC computation
-            } // eof loop over all BB matches            
-            string windowName = "Final Results : TTC";
-            cv::namedWindow(windowName, 4);
-            cv::imshow(windowName, visImg);
-            cv::waitKey(1);
+            } // eof loop over all BB matches    
+            if(visImg.size[0]>0 && visImg.size[1]>0)
+            {
+                string windowName = "Final Results : TTC";
+                cv::namedWindow(windowName, 4);
+                cv::imshow(windowName, visImg);
+                cv::waitKey(1);
+            }        
         }
 
     } // eof loop over all images
@@ -317,6 +319,22 @@ int main(int argc, const char *argv[])
         std:cout << "track_id: " << TTCs.first << std::endl;
         for(float ttc: TTCs.second) std::cout << ttc << " ";
         std::cout << std::endl;
+    }
+    return;
+}
+
+int main(int argc, const char *argv[])
+{
+    vector<string> detectorTypes {"SHITOMASI", "HARRIS", "FAST", "BRISK", "ORB", "AKAZE", "SIFT"};
+    vector<string> descriptorTypes {"BRIEF", "ORB", "FREAK", "AKAZE", "SIFT"};
+    for(string detectorType: detectorTypes){
+        for(string descriptorType: descriptorTypes) {
+            //remove incompatible combinations
+            if (descriptorType == "BRIEF" && detectorType == "SIFT") continue;
+            if (descriptorType == "AKAZE" && detectorType != "AKAZE") continue;
+            cout << "detector: " << detectorType << " " << "descriptor: " << descriptorType << endl;
+            run(detectorType, descriptorType);
+        }
     }
     return 0;
 }
