@@ -12,6 +12,7 @@ struct CvPoint2fHash;
 float IOU(const std::unordered_set<cv::Point2f, CvPoint2fHash>& first, const std::unordered_set<cv::Point2f, CvPoint2fHash>& second);
 void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT,\
 float minZ = -1.5, float maxZ = -0.9, float minX = 2.0, float maxX = 20.0, float maxY = 2.0, float minR = 0.1);
+void RemoveGroundPlane(DataFrame& currFrameBuffer, float maxIterationsRansac, double distanceThresholdRansac, bool lidarPointsCropped);
 void clusterKptMatchesWithROI(DataFrame& currFrameBuffer);
 void matchBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, float iouTolerance, int& max_track_id);
 void match3DBoundingBoxes(std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame, float iouTolerance, int& max_track_id);

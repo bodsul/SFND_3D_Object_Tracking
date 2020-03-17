@@ -34,6 +34,8 @@ In this final project, you will implement the missing parts in the schematic. To
 3. Compile: `cmake .. && make`
 4. Run it: `./3D_object_tracking`.
 
+If you get the error libc++abi.dylib: terminating with uncaught exception of type cv::Exception: OpenCV(4.1.0) /tmp/opencv-20190505- 12101-14vk1fh/opencv-4.1.0/modules/dnn/src/darknet/darknet_io.cpp:694: error: (-213:The function/feature is not implemented) Transpose the weights (except for convolutional) is not implemented in function 'ReadDarknetFromWeightsStream'. It is as a result of yolov3.weights file not getting stored correctly on Github. Perhaps a good use case of git-lfs. Please follow the instructions here to fix it https://stackoverflow.com/questions/54785928/opencv-implementation-of-yolo-v3-reproduces-exception-on-a-gcp-instance.
+
 ## Implementation Explanations
 In this project we detect lidar point cloud from Lidar, image bounding boxes and keypoints from camera image for a driving scene. This is done frame by frame. We detect image keypoints using several key point detectors (to be added) and match keypoints between consecutive frames using several key point matchers (to be added).
 

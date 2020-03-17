@@ -134,11 +134,16 @@ int main(int argc, const char *argv[])
 
 
         /* CLUSTER LIDAR POINT CLOUD */
-
         // associate Lidar points with camera-based ROI
         float shrinkFactor = 0.10; // shrinks each bounding box by the given percentage to avoid 3D object merging at the edges of an ROI
         clusterLidarWithROI((dataBuffer.end()-1)->boundingBoxes, (dataBuffer.end() - 1)->lidarPoints, shrinkFactor, P_rect_00, R_rect_00, RT);
-
+        //cluster point cloud to get 3D bounding boxes
+        int max_iterations_ransac = 100;
+        float distance_tolerance_ransac = 0.5;
+        float cluster_tolerance = 1.0f;
+        int min_cluster_size = 30;
+        bool lidar_points_cropped = false;
+        RemoveGroundPlane(*(dataBuffer.end()-1), max_iterations_ransac, distance_tolerance_ransac, lidar_points_cropped);
         // Visualize 3D objects
         bVis = false;
         if(bVis)
@@ -273,25 +278,25 @@ int main(int argc, const char *argv[])
                 {   
                     // STUDENT ASSIGNMENT
                     // TASK FP.2 -> compute time-to-collision based on Lidar data (implement -> computeTTCLidar)
-                    double ttcLidar; 
-                    computeTTC(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcLidar);
+                    double ttcCamera; 
+                    computeTTC(prevBB->lidarPoints, currBB->lidarPoints, sensorFrameRate, ttcCamera);
                     // EOF STUDENT ASSIGNMENT
 
                     // STUDENT ASSIGNMENT
                     // TASK FP.3 -> assign enclosed keypoint matches to bounding box (implement -> clusterKptMatchesWithROI)
                     // TASK FP.4 -> compute time-to-collision based on camera (implement -> computeTTCCamera)
-                    double ttcCamera;
-                    //computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
                     //showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00, R_rect_00, RT, &visImg);
-                    track_id_to_TTCs_map[currBB->trackID].push_back(ttcLidar);
+                    track_id_to_TTCs_map[currBB->trackID].push_back(ttcCamera);
                     cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y), cv::Point(currBB->roi.x + currBB->roi.width, currBB->roi.y + currBB->roi.height),\
                         colors[currBB->trackID % colors.size()], 2);
                     char str_id[5];
                     sprintf(str_id, "track id %d", currBB->trackID);
-                    //putText(visImg, str_id, cv::Point(currBB->roi.x, currBB->roi.y-10), \
+                    putText(visImg, str_id, cv::Point(currBB->roi.x, currBB->roi.y-10), \
                     cv::FONT_HERSHEY_SIMPLEX, 0.9, colors[currBB->trackID], 2);
                     if(currBB->vehicle_in_front)
                     {
+                        double ttcLidar;
+                        computeTTC((dataBuffer.end() - 2)->lidarPointsVehicleInFront, (dataBuffer.end() - 1)->lidarPointsVehicleInFront, sensorFrameRate, ttcLidar);
                         char str[200];
                         sprintf(str, "TTC Lidar : %f s, TTC Camera : %f s", ttcLidar, ttcCamera);
                         putText(visImg, str, cv::Point2f(80, 50), cv::FONT_HERSHEY_PLAIN, 2, cv::Scalar(0,0,255));

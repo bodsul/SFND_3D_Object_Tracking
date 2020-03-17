@@ -2,12 +2,13 @@
 #include <iostream>
 #include <algorithm>
 #include <numeric>
+#include <random>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include "camFusion.hpp"
 #include "dataStructures.h"
-
+#include "lidarData.hpp"
 using namespace std;
 
 //function object for hashing cv::Point2f types
@@ -26,6 +27,96 @@ struct
         return item.second > other.second;
     }
 }CustomGreaterThan;
+
+std::unordered_set<int> pickSet(int N, int k, std::mt19937& gen)
+{
+    std::unordered_set<int> elems;
+    for (int r = N - k; r < N; ++r) {
+        int v = std::uniform_int_distribution<>(1, r)(gen);
+
+        // there are two cases.
+        // v is not in candidates ==> add it
+        // v is in candidates ==> well, r is definitely not, because
+        // this is the first iteration in the loop that we could've
+        // picked something that big.
+
+        if (!elems.insert(v).second) {
+            elems.insert(r);
+        }   
+    }
+    return elems;
+}
+
+std::vector<LidarPoint> RansacPlane(std::vector<LidarPoint>& cloud, int maxIterations, float distanceTol)
+{
+	std::vector<LidarPoint> inliersResult;
+	int max_inliers = 0;
+	srand(time(NULL));
+	
+	// TODO: Fill in this function
+
+	// For max iterations 
+	// Randomly sample subset and fit line
+
+	// Measure distance between every point and fitted line
+	// If distance is smaller than threshold count it as inlier
+
+	// Return indicies of inliers from fitted line with most inliers
+	std::vector<int> sample(3);
+	std::vector<LidarPoint> pts(3);
+
+	for(int j = 0; j < maxIterations; ++ j)
+	{
+		std::vector<LidarPoint> currResult;
+		std::random_device rd;
+		std::mt19937 gen(rd());
+		std::unordered_set<int> sample = pickSet(cloud.size(), 3, gen);
+		int l = 0;
+		for(int k: sample){
+			pts[l] = cloud[k];
+			l++;
+		}
+		float A = (pts[1].y - pts[0].y)*(pts[2].z-pts[0].z) - (pts[2].y-pts[0].y)*(pts[1].z-pts[0].z);
+		float B = (pts[2].x - pts[0].x)*(pts[1].z-pts[0].z) - (pts[1].x-pts[0].x)*(pts[2].z-pts[0].z);
+		float C = (pts[1].x - pts[0].x)*(pts[2].y-pts[0].y) - (pts[2].x-pts[0].x)*(pts[1].y-pts[0].y);
+		if(A==0 && B==0 && C==0) continue;
+		float D = -(A*pts[0].x + B*pts[0].y + C*pts[0].z);
+		float distance = std::abs(A*pts[1].x + B*pts[1].y + C*pts[1].z + D)/std::sqrt(A*A + B*B + C*C);
+		for(int k = 0; k < cloud.size(); ++k){
+			LidarPoint pt = cloud[k];
+			float distance = std::abs(A*pt.x + B*pt.y + C*pt.z + D)/std::sqrt(A*A + B*B + C*C);
+			if(distance < distanceTol) currResult.push_back(pt);
+		}
+		if(currResult.size() > max_inliers)
+		{
+			max_inliers = currResult.size();
+			inliersResult = currResult;
+		}
+	}
+    std::cout << "size " << cloud.size() << " inliers size " << inliersResult.size() << std::endl;
+	return inliersResult;
+}
+
+void RemoveGroundPlane(DataFrame& currFrameBuffer, float maxIterationsRansac, double distanceThresholdRansac, bool lidarPointsCropped)
+{
+    std::vector<LidarPoint> inliers;
+    if(!lidarPointsCropped)
+    {
+        // remove Lidar points based on distance properties
+        float minZ = -1.5, maxZ = -0.9, minX = 2.0, maxX = 20.0, maxY = 2.0, minR = 0.1; // focus on ego lane
+        std::vector<LidarPoint> cropped_lidarPoints=currFrameBuffer.lidarPoints;
+        cropLidarPoints(cropped_lidarPoints, minX, maxX, maxY, minZ, maxZ, minR);
+        inliers = RansacPlane(cropped_lidarPoints, maxIterationsRansac, distanceThresholdRansac);
+    }
+    else
+    {
+        inliers = RansacPlane(currFrameBuffer.lidarPoints, maxIterationsRansac, distanceThresholdRansac);
+    }
+   
+    for(auto pt: inliers){
+        currFrameBuffer.lidarPointsVehicleInFront.push_back(pt);
+    }
+}
 
 // Create groups of Lidar points whose projection into the camera falls into the same bounding box
 void clusterLidarWithROI(std::vector<BoundingBox> &boundingBoxes, std::vector<LidarPoint> &lidarPoints, float shrinkFactor, cv::Mat &P_rect_xx, cv::Mat &R_rect_xx, cv::Mat &RT, 
