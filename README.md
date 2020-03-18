@@ -36,7 +36,7 @@ In this final project, you will implement the missing parts in the schematic. To
 
 If you get the error `libc++abi.dylib: terminating with uncaught exception of type cv::Exception: OpenCV(4.1.0) /tmp/opencv-20190505- 12101-14vk1fh/opencv-4.1.0/modules/dnn/src/darknet/darknet_io.cpp:694: error: (-213:The function/feature is not implemented) Transpose the weights (except for convolutional) is not implemented in function 'ReadDarknetFromWeightsStream'. It is as a result of yolov3.weights file being large and not getting stored correctly on Github. Perhaps this a good use case for using git-lfs. To fix this from the top level project directory run:
 
-wget -O ./dat/yolo/yolov3.weights "https://pjreddie.com/media/files/yolov3.weights" 
+`wget -O ./dat/yolo/yolov3.weights "https://pjreddie.com/media/files/yolov3.weights"` 
 
 For more info see https://stackoverflow.com/questions/54785928/opencv-implementation-of-yolo-v3-reproduces-exception-on-a-gcp-instance.`
 
