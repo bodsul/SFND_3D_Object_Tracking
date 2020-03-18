@@ -25,7 +25,7 @@
 using namespace std;
 
 /* MAIN PROGRAM */
-void run(string detectorType, string descriptorType)
+void run(string detectorType, string descriptorType, ofstream &TTCCamerafile, ofstream &TTCLidarfile)
 {
     /* INIT VARIABLES AND DATA STRUCTURES */
 
@@ -83,7 +83,8 @@ void run(string detectorType, string descriptorType)
     //map from boxID to track id 
     //std::unordered_map<int, int> box_id_to_track_id_map;
     //TTC_matrix[i] is a vector of TTCS for object with track id i
-    std::unordered_map<int, std::vector<float>> track_id_to_TTCs_map;
+    std::unordered_map<int, std::vector<std::pair<int, float>>> track_id_to_TTCs_map;
+    std::vector<std::pair<int, float>> TTCLidarEgoVehicle;
     int max_track_id = -1;
     /* MAIN LOOP OVER ALL IMAGES */
 
@@ -167,15 +168,8 @@ void run(string detectorType, string descriptorType)
 
         // extract 2D keypoints from current image
         vector<cv::KeyPoint> keypoints; // create empty feature list for current image
-
-        if (detectorType.compare("SHITOMASI") == 0)
-        {
-            detKeypointsShiTomasi(keypoints, imgGray, false);
-        }
-        else
-        {
-            //...
-        }
+        
+        detKeypoints(keypoints, imgGray, false, detectorType);
 
         // optional : limit number of keypoints (helpful for debugging and learning)
         bool bLimitKpts = false;
@@ -200,7 +194,6 @@ void run(string detectorType, string descriptorType)
         /* EXTRACT KEYPOINT DESCRIPTORS */
 
         cv::Mat descriptors;
-        string descriptorType = "BRISK"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
         descKeypoints((dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->cameraImg, descriptors, descriptorType);
 
         // push descriptors for current frame to end of data buffer
@@ -219,7 +212,7 @@ void run(string detectorType, string descriptorType)
 
             vector<cv::DMatch> matches;
             string matcherType = "MAT_BF";        // MAT_BF, MAT_FLANN
-            string selectorType = "SEL_NN";       // SEL_NN, SEL_KNN
+            string selectorType = "SEL_KNN";       // SEL_NN, SEL_KNN
 
             matchDescriptors((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
                              (dataBuffer.end() - 2)->descriptors, (dataBuffer.end() - 1)->descriptors,
@@ -285,7 +278,7 @@ void run(string detectorType, string descriptorType)
                     // TASK FP.3 -> assign enclosed keypoint matches to bounding box (implement -> clusterKptMatchesWithROI)
                     // TASK FP.4 -> compute time-to-collision based on camera (implement -> computeTTCCamera)
                     //showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00, R_rect_00, RT, &visImg);
-                    track_id_to_TTCs_map[currBB->trackID].push_back(ttcCamera);
+                    track_id_to_TTCs_map[currBB->trackID].push_back({imgIndex+1, ttcCamera});
                     cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y), cv::Point(currBB->roi.x + currBB->roi.width, currBB->roi.y + currBB->roi.height),\
                         colors[currBB->trackID % colors.size()], 2);
                     char str_id[5];
@@ -296,6 +289,7 @@ void run(string detectorType, string descriptorType)
                     {
                         double ttcLidar;
                         computeTTC((dataBuffer.end() - 2)->lidarPointsVehicleInFront, (dataBuffer.end() - 1)->lidarPointsVehicleInFront, sensorFrameRate, ttcLidar);
+                        TTCLidarEgoVehicle.push_back({imgIndex, ttcLidar});
                         char str[200];
                         sprintf(str, "TTC Lidar : %f s, TTC Camera : %f s", ttcLidar, ttcCamera);
                         putText(visImg, str, cv::Point2f(80, 50), cv::FONT_HERSHEY_PLAIN, 2, cv::Scalar(0,0,255));
@@ -313,28 +307,47 @@ void run(string detectorType, string descriptorType)
 
     } // eof loop over all images
 
-    //print out TTCs
+    //save TTCs
     for(auto TTCs: track_id_to_TTCs_map)
     {
-        std:cout << "track_id: " << TTCs.first << std::endl;
-        for(float ttc: TTCs.second) std::cout << ttc << " ";
+        //std:cout << "track_id: " << TTCs.first << std::endl;
+        for(auto frame_ttc_pair: TTCs.second) TTCCamerafile << detectorType << ", " << descriptorType << ", " \
+        << TTCs.first << ", " << frame_ttc_pair.first << ", " << frame_ttc_pair.second << "\n" ;
         std::cout << std::endl;
     }
+    for(auto frame_ttc_pair: TTCLidarEgoVehicle) TTCLidarfile << detectorType << ", " << descriptorType << ", " \
+        << frame_ttc_pair.first << ", " << frame_ttc_pair.second << "\n" ;
     return;
 }
 
 int main(int argc, const char *argv[])
 {
-    vector<string> detectorTypes {"SHITOMASI", "HARRIS", "FAST", "BRISK", "ORB", "AKAZE", "SIFT"};
-    vector<string> descriptorTypes {"BRIEF", "ORB", "FREAK", "AKAZE", "SIFT"};
-    for(string detectorType: detectorTypes){
-        for(string descriptorType: descriptorTypes) {
-            //remove incompatible combinations
-            if (descriptorType == "BRIEF" && detectorType == "SIFT") continue;
-            if (descriptorType == "AKAZE" && detectorType != "AKAZE") continue;
-            cout << "detector: " << detectorType << " " << "descriptor: " << descriptorType << endl;
-            run(detectorType, descriptorType);
+    ofstream TTCLidarfile, TTCCamerafile;
+    TTCLidarfile.open("../TTCLidar.csv");
+    TTCCamerafile.open("../TTCCamera.csv");
+    if(TTCLidarfile.is_open() && TTCCamerafile.is_open())
+    {
+        TTCLidarfile << "Detector, Descriptor, frame, TTCLidar for vehicle in front\n";
+        TTCCamerafile << "Detector, Descriptor, frame, track_id, TTCCamera\n";
+        vector<string> detectorTypes {"SHITOMASI", "HARRIS", "FAST", "BRISK", "ORB", "AKAZE", "SIFT"};
+        vector<string> descriptorTypes {"BRIEF", "ORB", "FREAK", "AKAZE", "SIFT"};
+        for(string detectorType: detectorTypes){
+            for(string descriptorType: descriptorTypes) {
+                //remove incompatible combinations
+                if (descriptorType == "BRIEF" && detectorType == "SIFT") continue;
+                if (descriptorType == "AKAZE" && detectorType != "AKAZE") continue;
+                cout << "detector: " << detectorType << " " << "descriptor: " << descriptorType << endl;
+                run(detectorType, descriptorType, TTCCamerafile, TTCLidarfile);
+            }
         }
+        TTCLidarfile.close();
+        TTCCamerafile.close();
     }
+    else
+    {
+        if(!TTCLidarfile.is_open() std::cout << "Unable to open TTCLidar.csv\n";
+        if(!TTCCamerafile.is_open() std::cout << "Unable to open TTCCamera.csv\n";
+    }
+    
     return 0;
 }

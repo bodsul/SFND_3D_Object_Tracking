@@ -34,23 +34,34 @@ In this final project, you will implement the missing parts in the schematic. To
 3. Compile: `cmake .. && make`
 4. Run it: `./3D_object_tracking`.
 
-If you get the error `libc++abi.dylib: terminating with uncaught exception of type cv::Exception: OpenCV(4.1.0) /tmp/opencv-20190505- 12101-14vk1fh/opencv-4.1.0/modules/dnn/src/darknet/darknet_io.cpp:694: error: (-213:The function/feature is not implemented) Transpose the weights (except for convolutional) is not implemented in function 'ReadDarknetFromWeightsStream'. It is as a result of yolov3.weights file not getting stored correctly on Github. Perhaps a this a good use case for using git-lfs. Please follow the instructions here to fix it https://stackoverflow.com/questions/54785928/opencv-implementation-of-yolo-v3-reproduces-exception-on-a-gcp-instance.`
+If you get the error `libc++abi.dylib: terminating with uncaught exception of type cv::Exception: OpenCV(4.1.0) /tmp/opencv-20190505- 12101-14vk1fh/opencv-4.1.0/modules/dnn/src/darknet/darknet_io.cpp:694: error: (-213:The function/feature is not implemented) Transpose the weights (except for convolutional) is not implemented in function 'ReadDarknetFromWeightsStream'. It is as a result of yolov3.weights file being large and not getting stored correctly on Github. Perhaps this a good use case for using git-lfs. To fix this from the top level project directory run:
+
+wget -O ./dat/yolo/yolov3.weights "https://pjreddie.com/media/files/yolov3.weights" 
+
+For more info see https://stackoverflow.com/questions/54785928/opencv-implementation-of-yolo-v3-reproduces-exception-on-a-gcp-instance.`
 
 ## Implementation Explanations
-In this project we detect lidar point cloud from Lidar, image bounding boxes and keypoints from camera image for a driving scene. This is done frame by frame. We detect image keypoints using several key point detectors (to be added) and match keypoints between consecutive frames using several key point matchers (to be added).
+In this project we detect lidar point cloud from Lidar, image bounding boxes and keypoints from camera image for a driving scene. This is done frame by frame. We detect image keypoints using several key point detectors and match keypoints between consecutive frames using several key point matchers.
 
 Using camera intrinsic and extrinsic calibration parameters and also the lidar calibration parameters we are able to
 project lidar points to the image plane. This gives a correspondence between image bounding boxes and lidar points. These parts of the project were already implemented for us or in previous sections of the course.
 
 Below we describe extra implementations added in `src/camFusion_Student.cpp`:
 
-We get a correspondence between image bounding boxes and keypoints by assigning each keypoint to all bounding boxes
+We get a correspondence between image 2D bounding boxes and keypoints by assigning each keypoint to all bounding boxes
 they fall into. Similarly, we have a correspondence between image bounding boxes and keypoint matches. This is implemented in `clusterKptMatchesWithROI`.
 
-Using the association of bounding boxes to keypoints and keypoint matches, we can match bounding boxes in corresponding frames. First for each bounding box in the current frame we predict matched key points to
+Using the association of 2D bounding boxes to keypoints and keypoint matches, we can match bounding boxes in corresponding frames. First for each bounding box in the current frame we predict matched key points to
 the previous frame using the matches in the ROI of the bounding box. Next we compute the IOU of the predicted key points with the keypoints in the ROI of the bounding boxes in the previous frame. This gives a score between all pair
 of bounding boxes in the current frame and the previous frame. Using the score, we implement a standard association algorithm. The details can be found in `matchBoundingBoxes`.
 
-Using the matched bounding boxes and lidar points that project into the bounding boxes, we get can estimate a trajectory in 3D space which can be used to estimate a lidar based TTC. The details are implemented in `computeTTCLidar`.
+Using the matched 2D bounding boxes and lidar points that project into the bounding boxes, we get can estimate a trajectory in 3D space which can be used to estimate a lidar based TTC. 
 
-Add descriptions of `computeTTCCamera`, descriptions of examples where TTC estimate of the Lidar sensor does not seem plausible and description of comparison of the performance of the different keypoint detection and matching algorithms after it is clarified what `computeTTCCamera` should be doing.
+Focusing on the ego lane by cropping the point cloud we are also able to track the vehicle directly in front in the ego lane.These gives us a pure lidar implementation for TTC. The details are for both TTC estimates are implemented in `computeTTC`.
+
+The 2D bounding box track camera based TTC estimates for different key point detection and description algorithms are shown
+in `TTCCamera.csv` in the project top level directory. We show the TTC estimates for different track_ids. Note that for different combinations of (detection, descriptor) pairs, the track_id for a particular vehicle can change. However taking a closer we can
+see that the TTC estimates in independent of the detection or desriptor algorithm used. For example the TTC estimate for the
+ego vehicle directly is initially estimated to be 19.1481 and the final estimate is 0.505403. The reason the TTC estimate obtained this way is independent of the detection or feature description method is that once a good number of keypoints are detected the TTC estimate is only dependent on the Yolo 2D bounding box detection neural network and the point cloud data. 
+
+TTC estimates based only on point cloud data, for the vehicle directly in front of the ego lane is shown in `TTCLidar.csv` in the project top level directory.
