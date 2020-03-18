@@ -38,7 +38,7 @@ If you get the error `libc++abi.dylib: terminating with uncaught exception of ty
 
 `wget -O ./dat/yolo/yolov3.weights "https://pjreddie.com/media/files/yolov3.weights"` 
 
-For more info see https://stackoverflow.com/questions/54785928/opencv-implementation-of-yolo-v3-reproduces-exception-on-a-gcp-instance.`
+For more info see https://stackoverflow.com/questions/54785928/opencv-implementation-of-yolo-v3-reproduces-exception-on-a-gcp-instance.
 
 ## Implementation Explanations
 In this project we detect lidar point cloud from Lidar, image bounding boxes and keypoints from camera image for a driving scene. This is done frame by frame. We detect image keypoints using several key point detectors and match keypoints between consecutive frames using several key point matchers.
