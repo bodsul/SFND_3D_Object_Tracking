@@ -345,8 +345,8 @@ int main(int argc, const char *argv[])
     }
     else
     {
-        if(!TTCLidarfile.is_open() std::cout << "Unable to open TTCLidar.csv\n";
-        if(!TTCCamerafile.is_open() std::cout << "Unable to open TTCCamera.csv\n";
+        if(!TTCLidarfile.is_open()) cout << "Unable to open TTCLidar.csv\n";
+        if(!TTCCamerafile.is_open()) cout << "Unable to open TTCCamera.csv\n";
     }
     
     return 0;
